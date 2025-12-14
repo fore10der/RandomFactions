@@ -1,5 +1,6 @@
 # [Random Factions (Continued)](https://steamcommunity.com/sharedfiles/filedetails/?id=3402848147)
-
+
+
 ![Image](https://img.litet.net/logos/Info.png)
 
 Update of Dr. Plantabytes mod https://steamcommunity.com/sharedfiles/filedetails/?id=2896649114
@@ -46,6 +47,7 @@ From the main menu screen, click **Options - Mod options - Random Factions** to 
 * **Re-organize Factions:** If checked, then the New Colony screen will start with only random factions instead of standard factions (checked by default)
 * **% Xenotype Frequency:** ()if you do not have Biotech DLC installed, this option does nothing) 0-100% control of how often to convert a baseliner faction into a random xenotype factions (default 15%)
 * **Allow Duplicate Factions:** If checked, then the same faction may be chosen multiple times, e.g. your would could end up with 3 different Rough Outlander Factions (unchecked by default)
+* **Excluded Factions Prototypes:** List of factions excluded from generation. Useful when you don't want to deal with some primitive level factions (Industrial world may be lack of Medieval/Classical factions because of progress) (1.6 only) (empty by default)
 
 
 ## Features

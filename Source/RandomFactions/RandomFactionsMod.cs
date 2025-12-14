@@ -424,7 +424,7 @@ public class RandomFactionsMod : Mod
 
     private void DrawExcludedFactionsList(Listing_Standard listing)
     {
-        listing.Label("Excluded Factions (These will not be used as bases for random/xenotype factions)");
+        listing.Label("Excluded Factions (Requires game restart to apply)");
         
         bool changed = false;
 
