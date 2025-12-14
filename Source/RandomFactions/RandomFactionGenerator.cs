@@ -66,6 +66,12 @@ public class RandomFactionGenerator
                 continue;
             }
 
+            if (RandomFactionsMod.HardExcludedFactionDefs.Contains(def.defName))
+            {
+                modLogger.Trace($"Excluding user/hard-excluded faction def from base pool: {def.defName}");
+                continue;
+            }
+
             definedFactionDefs.Add(def);
         }
 

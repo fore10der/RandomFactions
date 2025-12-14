@@ -52,7 +52,7 @@ public class RandomFactionsMod : Mod
     };
 
     // don't make xenotype factions with these, leads to nonsensical "waster savage impid tribe", etc.
-    public static readonly HashSet<string> HardExcludedFactionDefs = new()
+    private static readonly HashSet<string> DefaultExcludedFactionDefs = new()
     {
         "TribeRoughNeanderthal",
         "PirateYttakin",
@@ -69,6 +69,28 @@ public class RandomFactionsMod : Mod
         "OutlanderPapou" // Papou
     };
 
+    private static HashSet<string> cachedExcludedFactionDefs;
+    public static HashSet<string> HardExcludedFactionDefs
+    {
+        get
+        {
+            if (cachedExcludedFactionDefs == null)
+            {
+                RebuildExcludedFactionDefs();
+            }
+            return cachedExcludedFactionDefs;
+        }
+    }
+
+    public static void RebuildExcludedFactionDefs()
+    {
+        cachedExcludedFactionDefs = new HashSet<string>(DefaultExcludedFactionDefs);
+        if (SettingsInstance?.userExcludedFactions != null)
+        {
+            cachedExcludedFactionDefs.UnionWith(SettingsInstance.userExcludedFactions);
+        }
+    }
+
     public static RandomFactionsMod Instance;
 
     public static RandomFactionsSettings SettingsInstance;
@@ -79,12 +101,24 @@ public class RandomFactionsMod : Mod
 
     public readonly Dictionary<string, FactionDef> patchedXenotypeFactions = new();
 
+    private Vector2 scrollPosition;
+    private float lastViewHeight = 1000f;
+
     public RandomFactionsMod(ModContentPack content) : base(content)
     {
         Instance = this;
         currentVersion = VersionFromManifest.GetVersionFromModMetaData(content.ModMetaData);
         Logger = new ModLogger("RandomFactionsMod");
         SettingsInstance = GetSettings<RandomFactionsSettings>();
+        
+        // Initialize list if null
+        if (SettingsInstance.userExcludedFactions == null)
+        {
+            SettingsInstance.userExcludedFactions = new List<string>();
+        }
+        
+        // Ensure the cache is built on startup
+        RebuildExcludedFactionDefs();
 
         Logger.Trace("RandomFactionsMod constructed");
 
@@ -274,6 +308,7 @@ public class RandomFactionsMod : Mod
 
     private void SettingsChanged()
     {
+        RebuildExcludedFactionDefs();
         if (SettingsInstance.removeOtherFactions)
         {
             zeroCountFactionDefs();
@@ -325,8 +360,23 @@ public class RandomFactionsMod : Mod
 
     public override void DoSettingsWindowContents(Rect inRect)
     {
+        // Ensure SettingsInstance is valid
+        if (SettingsInstance == null)
+        {
+             SettingsInstance = GetSettings<RandomFactionsSettings>();
+        }
+
+        // Ensure user list is initialized
+        if (SettingsInstance.userExcludedFactions == null)
+        {
+            SettingsInstance.userExcludedFactions = new List<string>();
+        }
+
+        Rect viewRect = new Rect(0f, 0f, inRect.width - 16f, lastViewHeight);
+        Widgets.BeginScrollView(inRect, ref scrollPosition, viewRect);
+
         Listing_Standard listing = new Listing_Standard();
-        listing.Begin(inRect);
+        listing.Begin(viewRect);
 
         listing.CheckboxLabeled(
             "RaFa.reorganiseFactions".Translate(),
@@ -353,9 +403,134 @@ public class RandomFactionsMod : Mod
             listing.Label("RaFa.currentModVersion".Translate(currentVersion));
             GUI.contentColor = Color.white;
         }
+
+        listing.Gap();
+        listing.GapLine();
+        
+        // Draw the excluded factions inline
+        DrawExcludedFactionsList(listing);
+
         listing.End();
+        
+        // Recalculate the content height for the next frame
+        // IMPORTANT: We must ensure it's at least as big as the window to avoid scrolling if not needed
+        // but large enough if content expands
+        lastViewHeight = Math.Max(listing.CurHeight + 100f, inRect.height);
+        
+        Widgets.EndScrollView();
 
         base.DoSettingsWindowContents(inRect);
+    }
+
+    private void DrawExcludedFactionsList(Listing_Standard listing)
+    {
+        listing.Label("Excluded Factions (These will not be used as bases for random/xenotype factions)");
+        
+        bool changed = false;
+
+        // Double check for null before accessing Count
+        if (SettingsInstance.userExcludedFactions == null)
+        {
+            SettingsInstance.userExcludedFactions = new List<string>();
+        }
+
+        if (SettingsInstance.userExcludedFactions.Count > 0)
+        {
+            for (int i = 0; i < SettingsInstance.userExcludedFactions.Count; i++)
+            {
+                string defName = SettingsInstance.userExcludedFactions[i];
+                FactionDef def = DefDatabase<FactionDef>.GetNamedSilentFail(defName);
+                
+                Rect rowRect = listing.GetRect(32f);
+                
+                // Draw background for alternate rows
+                if (i % 2 == 1) Widgets.DrawLightHighlight(rowRect);
+
+                if (def != null)
+                {
+                    // Info Card
+                    Rect infoRect = new Rect(rowRect.x, rowRect.y + 4f, 24f, 24f);
+                    Widgets.InfoCardButton(infoRect.x, infoRect.y, def);
+
+                    // Icon
+                    Rect iconRect = new Rect(infoRect.xMax + 4f, rowRect.y + 4f, 24f, 24f);
+                    try
+                    {
+                        GUI.color = def.DefaultColor;
+                        if (def.FactionIcon != null)
+                        {
+                            GUI.DrawTexture(iconRect, def.FactionIcon);
+                        }
+                        GUI.color = Color.white;
+                    }
+                    catch
+                    {
+                        // Handle missing textures gracefully
+                    }
+
+                    // Label
+                    Rect labelRect = new Rect(iconRect.xMax + 8f, rowRect.y, rowRect.width - 120f, 32f);
+                    Text.Anchor = TextAnchor.MiddleLeft;
+                    Widgets.Label(labelRect, def.LabelCap);
+                    Text.Anchor = TextAnchor.UpperLeft;
+                }
+                else
+                {
+                    // Fallback for removed mods/missing defs
+                    Rect labelRect = new Rect(rowRect.x + 36f, rowRect.y, rowRect.width - 120f, 32f);
+                    Text.Anchor = TextAnchor.MiddleLeft;
+                    GUI.color = Color.red;
+                    Widgets.Label(labelRect, defName + " (Missing)");
+                    GUI.color = Color.white;
+                    Text.Anchor = TextAnchor.UpperLeft;
+                }
+
+                // Remove Button
+                Rect btnRect = new Rect(rowRect.width - 80f, rowRect.y + 4f, 70f, 24f);
+                if (Widgets.ButtonText(btnRect, "Remove"))
+                {
+                    SettingsInstance.userExcludedFactions.RemoveAt(i);
+                    changed = true;
+                    i--;
+                }
+                
+                listing.Gap(2f);
+            }
+        }
+        else
+        {
+            listing.Label("No user excluded factions.");
+        }
+
+        listing.Gap(10f);
+
+        // Add Button
+        if (listing.ButtonText("Add..."))
+        {
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+            var candidates = DefDatabase<FactionDef>.AllDefsListForReading
+                .Where(f => !f.isPlayer && !f.hidden && f.categoryTag != RandomCategoryName && f.categoryTag != XenopatchCategoryName)
+                .OrderBy(f => f.label);
+
+            foreach (var f in candidates)
+            {
+                if (SettingsInstance.userExcludedFactions.Contains(f.defName) || DefaultExcludedFactionDefs.Contains(f.defName))
+                    continue;
+
+                options.Add(new FloatMenuOption(f.LabelCap, () =>
+                {
+                    SettingsInstance.userExcludedFactions.Add(f.defName);
+                    RebuildExcludedFactionDefs();
+                }, f.FactionIcon, f.DefaultColor));
+            }
+
+            if (options.Count == 0) options.Add(new FloatMenuOption("No other factions available", null));
+
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        if (changed) RebuildExcludedFactionDefs();
     }
 
     public static bool IsXenotypePatchable(FactionDef def)
